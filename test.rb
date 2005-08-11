@@ -4,6 +4,5 @@ require 'wmlib'
 
 include WM
 
-for window in Window
-  puts "#{window} - #{window.winclass}"
-end
+puts (Window * /test.rb/).remove_decor
+

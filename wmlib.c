@@ -217,6 +217,11 @@ void xwm_win_resize(Display *disp, Window win, int w, int h)
     XResizeWindow(disp, win, w, h);
 }
 
+void xwm_win_remove_decor(Display *disp, Window win)
+{
+   xwm_msg(disp, win, "_OB_WM_STATE_UNDECORATED", 0);
+}
+
 // --- Ruby Stuff ---
 
 #define rb_cmdef          rb_define_singleton_method
@@ -611,6 +616,24 @@ VALUE window_desktop(VALUE self)
     return new_desktop(d);
 }
 
+VALUE window_activate(VALUE self)
+{
+    rbwm_init(WINDOW);
+    xwm_win_activate(disp, data->win);
+
+    close_disp;
+    return self;
+}
+
+VALUE window_remove_decor(VALUE self)
+{
+    rbwm_init(WINDOW);
+    xwm_win_remove_decor(disp, data->win);
+    
+    close_disp;
+    return Qnil;
+}
+
 // This is where it starts to get ugly
 // I'm still debugging/reworking all this. It doesnt really work yet.
 
@@ -715,6 +738,7 @@ void Init_wmlib()
     rb_imdef(cWindow, "winclass", window_class, 0);
     rb_imdef(cWindow, "desktop", window_desktop, 0);
     rb_imdef(cWindow, "desktop=", window_set_desktop, 1);
+    rb_imdef(cWindow, "activate", window_activate, 0);
 
     rb_imdef(cWindow, "height", window_height, 0);
     rb_imdef(cWindow, "width", window_width, 0);
@@ -732,4 +756,6 @@ void Init_wmlib()
     rb_imdef(cWindow, "dir_right", window_dir_right, 0);
     rb_imdef(cWindow, "dir_top", window_dir_top, 0);
     rb_imdef(cWindow, "dir_bottom", window_dir_bottom, 0);
+
+    rb_imdef(cWindow, "remove_decor", window_remove_decor, 0);
 }
