@@ -4,6 +4,34 @@
     Window Management Library for Ruby
     SegPhault (Ryan Paul) - 02/13/05
 
+    NOTES
+    ------
+
+    I used the source code of Tomas Styblo's wmctrl utility as a starting point
+    to help me figure out some of the X stuff. You can find his excellent command
+    line utility here: http://www.sweb.cz/tripie/utils/wmctrl/
+    
+    XGrabKey Resources:
+    
+    * http://mail.gnome.org/archives/gtk-app-devel-list/2005-August/msg00280.html
+    * http://sunsolve.sun.com/search/document.do?assetkey=1-9-15043-1
+
+    LICENSE
+    -------
+    
+    This program is free software which I release under the GNU General Public
+    License. You may redistribute and/or modify this program under the terms
+    of that license as published by the Free Software Foundation; either
+    version 2 of the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    To get a copy of the GNU General Puplic License,  write to the
+    Free Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+    
 */
 
 #include <stdlib.h>
@@ -33,6 +61,7 @@
 char* xwm_get_win_title(Display *disp, Window win);
 VALUE new_window(Window win);
 VALUE window_desktop(VALUE self);
+VALUE desktop_index(VALUE self);
 
 static int xwm_long_msg(Display *disp, Window win, char *msg,
     long d0, long d1, long d2, long d3, long d4)
@@ -315,6 +344,82 @@ VALUE Desktop_current(VALUE self)
     return window_desktop(new_window(w));
 }
 
+VALUE Desktop_set_current(VALUE self, VALUE d)
+{
+    open_disp;
+    
+    if (TYPE(d) == T_FIXNUM)
+        xwm_desk_activate(disp, FIX2INT(d));
+    
+    if (ISA(d, cDesktop))
+        xwm_desk_activate(disp, FIX2INT(desktop_index(d)));
+
+    close_disp;
+    return self;
+}
+
+VALUE desktop_op_add(VALUE self, VALUE n)
+{
+    open_disp;
+    int dval = -1;
+
+    if (TYPE(n) == T_FIXNUM)
+        dval = FIX2INT(desktop_index(self)) + FIX2INT(n);
+    
+    if (ISA(n, cDesktop))
+        dval = FIX2INT(desktop_index(self)) + FIX2INT(desktop_index(n));
+
+    close_disp;
+    
+    return new_desktop(dval != -1 ? dval : 0);
+}
+
+VALUE desktop_op_sub(VALUE self, VALUE n)
+{
+    open_disp;
+    int dval = -1;
+
+    if (TYPE(n) == T_FIXNUM)
+        dval = FIX2INT(desktop_index(self)) - FIX2INT(n);
+    
+    if (ISA(n, cDesktop))
+        dval = FIX2INT(desktop_index(self)) - FIX2INT(desktop_index(n));
+
+    close_disp;
+    
+    return new_desktop(dval != -1 ? dval : 0);
+}
+
+VALUE desktop_op_eq(VALUE self, VALUE d)
+{
+    open_disp;
+
+    if (ISA(d,cDesktop))
+        return rb_equal(desktop_index(self), desktop_index(d));
+
+    if (TYPE(d) == T_FIXNUM)
+        return rb_equal(desktop_index(self), d);
+    
+    close_disp;
+
+    return Qfalse;
+}
+
+VALUE Desktop_last(VALUE self)
+{
+    open_disp;
+
+    int cnt = xwm_desk_count(disp);
+
+    close_disp;
+    return new_desktop(cnt - 1);
+}
+
+VALUE Desktop_first(VALUE self)
+{
+    return new_desktop(0);
+}
+
 VALUE Desktop_each(VALUE self)
 {
     open_disp;
@@ -395,6 +500,48 @@ VALUE Window_current(VALUE self)
  
     close_disp;
     return w ? new_window(w) : Qnil;
+}
+
+VALUE Window_on_press(VALUE self, VALUE keys)
+{
+    open_disp;
+    
+    KeyCode mykey = 0;
+    KeySym mysym;
+
+    Window w = xwm_get_win_active(disp);
+    mysym = XStringToKeysym(STR2CSTR(keys));
+    mykey = XKeysymToKeycode(disp, mysym);
+
+    XGrabKey(disp, mykey, AnyModifier, w, True, GrabModeAsync, GrabModeAsync);
+    
+    close_disp;
+    return Qnil;
+}
+
+VALUE Window_key_loop(VALUE self)
+{
+    open_disp;
+
+    XEvent ev;
+    KeySym grabbed_key;
+
+    for (;;)
+    {
+        XNextEvent(disp, &ev);
+
+        switch (ev.type)
+        {
+            case KeyPress:
+                grabbed_key = XKeycodeToKeysym(disp, ev.xkey.keycode, 0);
+                printf("Test: %s", grabbed_key);
+
+            default:
+                break;
+        }
+    }
+    
+    return Qnil;
 }
 
 VALUE Window_each(VALUE self)
@@ -502,7 +649,7 @@ VALUE window_set_height(VALUE self, VALUE x)
 
 VALUE window_op_eq(VALUE self, VALUE other)
 {
-
+    // Match window title
     if (ISA(other,cWindow))
         return rb_equal(window_id(self), window_id(other));
 
@@ -520,6 +667,7 @@ VALUE window_op_eq(VALUE self, VALUE other)
 
 VALUE window_op_teq(VALUE self, VALUE other)
 {
+    // Match window class rather than title
     if (ISA(other,cWindow))
         return rb_equal(window_class(self), window_class(other));
 
@@ -713,17 +861,26 @@ void Init_wmlib()
     cDesktop = rb_wmclass("Desktop");
     rb_cmdef(cDesktop, "new", Desktop_new, 1);
     rb_cmdef(cDesktop, "current", Desktop_current, 0);
+    rb_cmdef(cDesktop, "current=", Desktop_set_current, 1);
     rb_cmdef(cDesktop, "each", Desktop_each, 0);
     rb_cmdef(cDesktop, "count", Desktop_count, 0);
+    rb_cmdef(cDesktop, "last", Desktop_last, 0);
+    rb_cmdef(cDesktop, "first", Desktop_first, 0);
     rb_imdef(cDesktop, "index", desktop_index, 0);
     rb_imdef(cDesktop, "each", desktop_each, 0);
     rb_imdef(cDesktop, "filter", Obj_filter, 0);
     rb_imdef(cDesktop, "find", Obj_find, 0);
     rb_imdef(cDesktop, "to_s", desktop_to_s, 0);
+    rb_imdef(cDesktop, "+", desktop_op_add, 1);
+    rb_imdef(cDesktop, "-", desktop_op_sub, 1);
+    rb_imdef(cDesktop, "==", desktop_op_eq, 1);
 
     cWindow = rb_wmclass("Window");
     rb_cmdef(cWindow, "new", Window_new, 0);
     rb_cmdef(cWindow, "current", Window_current, 0);
+    rb_cmdef(cWindow, "on_press", Window_on_press, 1);
+    rb_cmdef(cWindow, "key_loop", Window_key_loop, 0);
+
     rb_cmdef(cWindow, "each", Window_each, 0);
     rb_cmdef(cWindow, "filter", Obj_filter, 0);
     rb_cmdef(cWindow, "find", Obj_find, 0);

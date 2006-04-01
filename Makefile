@@ -8,8 +8,8 @@ INC = \
 		-I/usr/X11R6/include \
 		-I/usr/include/glib-2.0 \
 		-I/usr/lib/glib-2.0/include \
-		-I/usr/lib/ruby/1.8/i386-linux \
-		-I/usr/lib/ruby/1.8/i386-linux
+		-I/usr/lib/ruby/1.8/i486-linux \
+		-I/usr/lib/ruby/1.8
 
 LIB = \
 		-L/usr/lib \
@@ -18,8 +18,8 @@ LIB = \
 		-lruby1.8 -lpthread -ldl -lcrypt -lm -lc
 
 all:
-	$(CC) $(INC) -c wmlib.c
-	$(CC) -shared -o wmlib.so wmlib.o $(LIB)
+	$(CC) $(OPTS) $(INC) -c wmlib.c
+	$(CC) $(OPTS) -shared -o wmlib.so wmlib.o $(LIB)
 
 clean:
 	rm -f *.o *.so
