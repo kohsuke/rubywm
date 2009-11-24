@@ -99,6 +99,7 @@ static gchar *get_property(Display *disp, Window win,
     unsigned char *ret_prop;
     int ret_format;
     gchar *ret;
+    int size_in_byte;
     
     xa_prop_name = XInternAtom(disp, prop_name, False);
     
@@ -113,7 +114,13 @@ static gchar *get_property(Display *disp, Window win,
         return NULL;
     }
 
-    tmp_size = (ret_format / 8) * ret_nitems;
+    switch(ret_format) {
+	case 8:	size_in_byte = sizeof(char); break;
+	case 16:	size_in_byte = sizeof(short); break;
+	case 32:	size_in_byte = sizeof(long); break;
+	}
+
+    tmp_size = size_in_byte * ret_nitems;
     ret = g_malloc(tmp_size + 1);
     memcpy(ret, ret_prop, tmp_size);
     ret[tmp_size] = '\0';
@@ -163,14 +170,21 @@ Window xwm_get_win_active(Display *disp)
     return prop ? *((Window*)prop) : ((Window)0);
 }
 
-Window *xwm_window_list(Display *disp, long *size)
+Window *xwm_window_list(Display *disp, gchar* prop1, gchar* prop2, long *size)
 {
     Window *nlst = (Window*)get_property(disp, wm_root, XA_WINDOW,
-            "_NET_CLIENT_LIST", size);
+            prop1 /*"_NET_CLIENT_LIST"*/, size);
     Window *lst = (Window *)get_property(disp, wm_root, XA_CARDINAL,
-            "_WIN_CLIENT_LIST", size);
+            prop2 /*"_WIN_CLIENT_LIST"*/, size);
 
     return nlst ? nlst : (lst ? lst : NULL);
+}
+
+Window* xwm_window_list_byage(Display* disp, long* size) {
+	return xwm_window_list(disp,"_NET_CLIENT_LIST","_WIN_CLIENT_LIST",size);
+}
+Window* xwm_window_list_bystack(Display* disp, long* size) {
+	return xwm_window_list(disp,"_NET_CLIENT_LIST_STACKING","_WIN_CLIENT_LIST_STACKING",size);
 }
 
 void xwm_desk_activate(Display *disp, int desk)
@@ -463,7 +477,7 @@ VALUE desktop_each(VALUE self)
     long cnt;
     int i;
 
-    Window *lst = xwm_window_list(disp, &cnt);
+    Window *lst = xwm_window_list_byage(disp, &cnt);
 
     for (i = 0; i < cnt / sizeof(Window); i++)
         if (xwm_get_win_desk(disp, lst[i]) == data->index)
@@ -550,13 +564,41 @@ VALUE Window_each(VALUE self)
     long cnt;
     int i;
 
-    Window *lst = xwm_window_list(disp, &cnt);
+    Window *lst = xwm_window_list_bystack(disp, &cnt);
+    // printf("Found %d\n",cnt/sizeof(Window));
 
     for (i = 0; i < cnt / sizeof(Window); i++)
         rb_yield(new_window(lst[i]));
 
     close_disp;
     return Qnil;
+}
+
+VALUE window_root(VALUE self)
+{
+	rbwm_init(WINDOW);
+	Window root,parent;
+	int i; Window* children;
+	XQueryTree(disp,data->win,&root,&parent,&children,&i);
+	if (children!=NULL)	XFree(children);
+	close_disp;
+	return new_window(root);
+}
+
+VALUE Window_eachChild(VALUE self)
+{
+	rbwm_init(WINDOW);
+	Window root,parent;
+	int i;
+	int nChild=0;
+	Window* children=NULL;
+	XQueryTree(disp,data->win,&root,&parent,&children,&nChild);
+	for (i=0; i<nChild; i++)
+		rb_yield(new_window(children[i]));
+	if (children!=NULL)
+		XFree(children);
+	close_disp;
+	return Qnil;
 }
 
 VALUE window_title(VALUE self)
@@ -806,7 +848,7 @@ VALUE window_dir(VALUE self, int dir)
 
     
     VALUE ret = self;
-    Window *lst = xwm_window_list(disp, &cnt);
+    Window *lst = xwm_window_list_byage(disp, &cnt);
 
     for (i = 0; i < cnt / sizeof(Window); i++)
     {
@@ -882,6 +924,7 @@ void Init_wmlib()
     rb_cmdef(cWindow, "key_loop", Window_key_loop, 0);
 
     rb_cmdef(cWindow, "each", Window_each, 0);
+    rb_imdef(cWindow, "eachChild", Window_eachChild, 0);
     rb_cmdef(cWindow, "filter", Obj_filter, 0);
     rb_cmdef(cWindow, "find", Obj_find, 0);
     rb_cmdef(cWindow, "*", Window_op_mul, 1);
@@ -897,6 +940,7 @@ void Init_wmlib()
     rb_imdef(cWindow, "desktop=", window_set_desktop, 1);
     rb_imdef(cWindow, "activate", window_activate, 0);
 
+    rb_imdef(cWindow, "root", window_root, 0);
     rb_imdef(cWindow, "height", window_height, 0);
     rb_imdef(cWindow, "width", window_width, 0);
     rb_imdef(cWindow, "top", window_top, 0);

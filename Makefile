@@ -1,14 +1,14 @@
 
 CC = gcc
 
-OPTS = -fPIC -Wall -g -02
+OPTS = -fPIC -Wall -g
 
 INC = \
 		-I. \
 		-I/usr/X11R6/include \
 		-I/usr/include/glib-2.0 \
 		-I/usr/lib/glib-2.0/include \
-		-I/usr/lib/ruby/1.8/i486-linux \
+		-I/usr/lib/ruby/1.8/x86_64-linux \
 		-I/usr/lib/ruby/1.8
 
 LIB = \
