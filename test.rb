@@ -43,6 +43,9 @@ class Point
     def length()
         Math.sqrt((@x*@x)+(@y*@y))
     end
+    def area()
+        return @x*@y
+    end
     def to_s()
         "(#{@x},#{@y})"
     end
@@ -104,12 +107,16 @@ class Screen
         }
     end
     
-    def rectSize(x,y)
-        (@xs[x+1]-@xs[x])*(@ys[y+1]-@ys[y])
+    def area(x,y)
+        (pt(x+1,y+1)-pt(x,y)).area
+    end
+    
+    def pt(x,y)
+        Point.new(@xs[x],@ys[y])
     end
     
     def center(x,y)
-        Point.new( (@xs[x+1]+@xs[x])/2 , (@ys[y+1]+@ys[y])/2 )
+        pt(x,y)+pt(x+1,y+1)/2
     end
 end
 
@@ -131,9 +138,9 @@ cog = windows.collect { |w|
     wp = Point.new(0,0)
     s.eachRegion { |x,y,wnd|
         if wnd==w then
-            rs = s.rectSize(x,y)
+            a = s.area(x,y)
             pixels += rs
-            wp += s.center(x,y)*rs
+            wp += s.center(x,y)*a
         end
     }
     # puts "#{w} - #{wp/pixels} #{pixels}"
