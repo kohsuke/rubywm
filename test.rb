@@ -52,7 +52,7 @@ class Point
 end
 
 class Wnd
-    attr_accessor :x1,:y1,:x2,:y2
+    attr_accessor :x1,:y1,:x2,:y2,:w
     def initialize(w)
         @x1 = w.left
         @y1 = w.top
@@ -94,7 +94,9 @@ class Screen
         @screen = Array.new(@xs.size-1).collect { Array.new(@ys.size-1) }
         windows.each { |w|
             eachRegion { |x,y,wnd|
-                @screen[x][y] = w  if  w.contains(@xs[x],@ys[y],@xs[x+1],@ys[y+1])
+                if w.contains(@xs[x],@ys[y],@xs[x+1],@ys[y+1]) then
+                    @screen[x][y] = w
+                end
             }
         }
     end
@@ -125,12 +127,23 @@ end
 # this enumerates windows from bottom to top
 windows = []
 WM::Window.each {|x|
-    if !(["gnome-panel","desktop_window"].include? x.winclass) then
-        windows << Wnd.new(x)
+    if !(["gnome-panel","desktop_window","compiz"].include? x.winclass) then
+        w = Wnd.new(x)
+        windows << w
+        puts "#{x.title} : #{x.winclass} (#{w.x1},#{w.y1},#{w.x2},#{w.y2})"
     end
 }
 
 s=Screen.new(windows)
+
+# screen real estate map
+(0...(s.ys.size-1)).each {|y|
+    (0...(s.xs.size-1)).each {|x|
+        w = s.screen[x][y]
+        print w==nil ? '-' : w.to_s[0,1]
+    }
+    puts ""
+}
 
 # compute the center of gravity for visible region of each window
 cog = windows.collect { |w|
@@ -139,17 +152,19 @@ cog = windows.collect { |w|
     s.eachRegion { |x,y,wnd|
         if wnd==w then
             a = s.area(x,y)
-            pixels += rs
+            pixels += a
             wp += s.center(x,y)*a
         end
     }
     # puts "#{w} - #{wp/pixels} #{pixels}"
     
-    OpenStruct.new({ :window => w, :center => wp/pixels, :size =>pixels })
+    OpenStruct.new({ :window => w, :center => pixels>0 ? wp/pixels : wp, :size =>pixels })
 }
 
+cog = cog.reverse  # top most first
+
 # this is the current top-most window
-cur = cog[-1]
+cur = cog[0]
 
 # ignore windows that are mostly invisible
 cog = cog.delete_if { |x| x.size<40000 }
@@ -157,14 +172,14 @@ cog = cog.delete_if { |x| x.size<40000 }
 
 if ARGV.size==0 then
     # diagnostic output
-    puts "Current windows is #{cur.window}"
-    cog.each { |w|
+    puts "Current windows is #{cur.window.to_s} (#{cur.window.w.winclass}) cog=#{cur.center}"
+    cog[1..-1].each { |w|
         relp = w.center-cur.center
-        puts "  #{w.window} #{relp} #{relp.direction}"
+        puts "  #{w.window} #{relp} #{relp.direction} d:#{relp.length} s:#{w.size}"
     }
 else
     target_dir = ARGV[0].to_sym
-    t=cog.select{ |w|  # of the windows that are in the right direction
+    t=cog[1..-1].select{ |w|  # of the windows that are in the right direction
         w!=cur && (w.center-cur.center).direction==target_dir
     }.min{|a,b| # pick up the nearest one
         (a.center-cur.center).length <=> (b.center-cur.center).length
