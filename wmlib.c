@@ -216,22 +216,24 @@ void xwm_win_activate(Display *disp, Window win)
 
 int xwm_get_win_size(Display *disp, Window win, int stype)
 {
-    int junkx, junky, bw, depth;
-    int width,height,left,top;
-    Window junkroot;
-    
-    XGetGeometry(disp, win, &junkroot, &junkx, &junky,
-            &width, &height, &bw, &depth);
+    XWindowAttributes a; int rx,ry; Window junkwin;
 
-    XTranslateCoordinates(disp, win, junkroot, junkx, junky,
-            &left, &top, &junkroot);
+    if (!XGetWindowAttributes(disp, win, &a))
+        return -1;
 
-    if (stype == WM_TOP)      return top;
-    if (stype == WM_BOTTOM)   return top + height;
-    if (stype == WM_LEFT)     return left;
-    if (stype == WM_RIGHT)    return left + width;
-    if (stype == WM_WIDTH)    return width;
-    if (stype == WM_HEIGHT)   return height;
+    int bw = a.border_width;
+
+    // translate the top-left boundary of this windo into the coordinates of the root widnow
+    XTranslateCoordinates (disp, win, a.root, 
+            -bw,-bw,
+            &rx, &ry, &junkwin);
+
+    if (stype == WM_TOP)      return ry;
+    if (stype == WM_BOTTOM)   return ry + a.height+bw*2;
+    if (stype == WM_LEFT)     return rx;
+    if (stype == WM_RIGHT)    return rx + a.width+bw*2;
+    if (stype == WM_WIDTH)    return a.width;
+    if (stype == WM_HEIGHT)   return a.height;
 }
 
 static gboolean xwm_supports(Display *disp, const char *prop)
