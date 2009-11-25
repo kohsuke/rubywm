@@ -131,6 +131,21 @@ static gchar *get_property(Display *disp, Window win,
     return ret;
 }
 
+int xwm_has_state(Display* disp, Window win, gchar* state_name)
+{
+    long size=0;
+    Atom state = XInternAtom(disp,state_name,False);
+    Atom* list = (Atom*)get_property(disp,win,XA_CARDINAL,"_NET_WM_STATE",&size);
+    int r = 0;
+    int i;
+    for (i=0; i<size/sizeof(Atom); i++) {
+        if (list[i]==state)
+            r = 1;
+    }
+    g_free(list);
+    return r;
+}
+
 int xwm_get_win_desk(Display *disp, Window win)
 {
     long *wdesk = (long*)get_property(disp,win, XA_CARDINAL,"_NET_WM_DESKTOP", NULL);
@@ -637,6 +652,24 @@ VALUE window_right(VALUE self)    { return windim(self, WM_RIGHT); }
 VALUE window_width(VALUE self)    { return windim(self, WM_WIDTH); }
 VALUE window_height(VALUE self)   { return windim(self, WM_HEIGHT); }
 
+/*
+ * Is the window visible?
+ *
+ * This excludes minimized windows. Not sure exactly what else would fit
+ * in this category.
+ */
+VALUE window_visible(VALUE self)
+{
+    XWindowAttributes a;
+    rbwm_init(WINDOW);
+
+    if (!XGetWindowAttributes(disp, data->win, &a))
+        return -1;
+
+    close_disp;
+    return a.map_state==IsViewable ? Qtrue : Qfalse;
+}
+
 VALUE window_id(VALUE self)
 {
     rbwm_init(WINDOW);
@@ -937,6 +970,7 @@ void Init_wmlib()
     rb_imdef(cWindow, "to_s", window_title, 0);
     rb_imdef(cWindow, "title", window_title, 0);
     rb_imdef(cWindow, "id", window_id, 0);
+    rb_imdef(cWindow, "visible?", window_visible, 0);
     rb_imdef(cWindow, "winclass", window_class, 0);
     rb_imdef(cWindow, "desktop", window_desktop, 0);
     rb_imdef(cWindow, "desktop=", window_set_desktop, 1);

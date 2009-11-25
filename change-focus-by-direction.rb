@@ -128,6 +128,9 @@ end
 # this enumerates windows from bottom to top
 windows = []
 WM::Window.each {|x|
+    if !x.visible? then
+        next
+    end
     if !(["gnome-panel","desktop_window","compiz"].include? x.winclass) then
         w = Wnd.new(x)
         windows << w
