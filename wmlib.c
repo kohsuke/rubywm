@@ -473,6 +473,15 @@ VALUE Desktop_count(VALUE self)
     return INT2FIX(cnt);
 }
 
+VALUE Desktop_root_window(VALUE self)
+{
+    open_disp;
+    VALUE v = new_window(DefaultRootWindow(disp));
+
+    close_disp;
+    return v;
+}
+
 VALUE desktop_index(VALUE self)
 {
     rb_struct(DESKTOP);
@@ -951,6 +960,7 @@ void Init_wmlib()
     rb_imdef(cDesktop, "+", desktop_op_add, 1);
     rb_imdef(cDesktop, "-", desktop_op_sub, 1);
     rb_imdef(cDesktop, "==", desktop_op_eq, 1);
+    rb_imdef(cDesktop, "root_window", Desktop_root_window,0);
 
     cWindow = rb_wmclass("Window");
     rb_cmdef(cWindow, "new", Window_new, 0);
