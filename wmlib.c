@@ -154,6 +154,15 @@ int xwm_get_win_desk(Display *disp, Window win)
     return nwdesk ? (int)*nwdesk : (wdesk ? (int)*wdesk : -1);
 }
 
+int xwm_get_win_pid(Display *disp, Window win)
+{
+    long *pid = (long*)get_property(disp,win, XA_CARDINAL,"_NET_WM_PID", NULL);
+    if (pid==NULL)  return -1;
+
+    return *pid;
+}
+
+
 void xwm_set_win_desk(Display *disp, Window win, int d)
 {
     xwm_msg(disp, win, "_NET_WM_DESKTOP", d);
@@ -850,6 +859,15 @@ VALUE window_desktop(VALUE self)
     return new_desktop(d);
 }
 
+VALUE window_pid(VALUE self)
+{
+    rbwm_init(WINDOW);
+    int pid = xwm_get_win_pid(disp, data->win);
+ 
+    close_disp;
+    return INT2FIX(pid);
+}
+
 VALUE window_activate(VALUE self)
 {
     rbwm_init(WINDOW);
@@ -983,6 +1001,7 @@ void Init_wmlib()
     rb_imdef(cWindow, "visible?", window_visible, 0);
     rb_imdef(cWindow, "winclass", window_class, 0);
     rb_imdef(cWindow, "desktop", window_desktop, 0);
+    rb_imdef(cWindow, "pid", window_pid, 0);
     rb_imdef(cWindow, "desktop=", window_set_desktop, 1);
     rb_imdef(cWindow, "activate", window_activate, 0);
 
