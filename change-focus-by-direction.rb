@@ -79,6 +79,15 @@ class Wnd
         @w.activate
     end
     
+    # is it completely invisible? Unity has a number of these windows
+    def is_outside_view
+        @x2<0 && @y2<0
+    end
+    
+    def id
+        @w.id
+    end
+    
     def to_s()
         @title
     end
@@ -123,7 +132,6 @@ class Screen
     end
 end
 
-
 # list up all windows that we care
 # this enumerates windows from bottom to top
 windows = []
@@ -133,8 +141,10 @@ WM::Window.each {|x|
     end
     if !(["gnome-panel","desktop_window","compiz"].include? x.winclass) then
         w = Wnd.new(x)
-        windows << w
-        puts "#{x.title} : #{x.winclass} (#{w.x1},#{w.y1},#{w.x2},#{w.y2})"
+        if !w.is_outside_view then
+            windows << w
+            puts "#{x.title} : #{x.winclass} (#{w.x1},#{w.y1},#{w.x2},#{w.y2})"
+        end
     end
 }
 
@@ -144,11 +154,12 @@ s=Screen.new(windows)
 (0...(s.ys.size-1)).each {|y|
     (0...(s.xs.size-1)).each {|x|
         w = s.screen[x][y]
-        print w==nil ? '-' : w.to_s[0,1]
+        print w==nil ? '-' : w.to_s.strip[0,1]
     }
     puts ""
 }
 
+cur = nil
 # compute the center of gravity for visible region of each window
 cog = windows.collect { |w|
     pixels = 0
@@ -162,21 +173,26 @@ cog = windows.collect { |w|
     }
     # puts "#{w} - #{wp/pixels} #{pixels}"
     
-    OpenStruct.new({ :window => w, :center => pixels>0 ? wp/pixels : wp, :size =>pixels })
+    cw = OpenStruct.new({ :window => w, :center => pixels>0 ? wp/pixels : wp, :size =>pixels })
+    if w.id==WM::Window.current.id then
+        cur = cw
+    end
+    
+    cw
 }
 
 cog = cog.reverse  # top most first
 
-# this is the current top-most window
-cur = cog[0]
+# if no window has focus, pick the top most
+cur = cog[0]    if cur==nil
 
 # ignore windows that are mostly invisible
-cog = cog.delete_if { |x| x.size<40000 }
+cog = cog.delete_if { |x| (x.size<40000).tap {|v| puts "too small: #{x.window}" if v } }
 
+puts "Current windows is #{cur.window.to_s} (#{cur.window.w.winclass}) cog=#{cur.center}"
 
 if ARGV.size==0 then
     # diagnostic output
-    puts "Current windows is #{cur.window.to_s} (#{cur.window.w.winclass}) cog=#{cur.center}"
     cog[1..-1].each { |w|
         relp = w.center-cur.center
         puts "  #{w.window} #{relp} #{relp.direction} d:#{relp.length} s:#{w.size}"
@@ -190,7 +206,10 @@ else
     }
     # if a suitable one is found, set focus
     if t!=nil then
+        puts "-> switching to #{t.window}"
         t.window.activate
+    else
+        puts "-> no match"
     end
 end
 
