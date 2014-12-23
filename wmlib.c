@@ -133,7 +133,7 @@ static gchar *get_property(Display *disp, Window win,
 
 int xwm_has_state(Display* disp, Window win, gchar* state_name)
 {
-    long size=0;
+    unsigned long size=0;
     Atom state = XInternAtom(disp,state_name,False);
     Atom* list = (Atom*)get_property(disp,win,XA_CARDINAL,"_NET_WM_STATE",&size);
     int r = 0;
@@ -194,7 +194,7 @@ Window xwm_get_win_active(Display *disp)
     return prop ? *((Window*)prop) : ((Window)0);
 }
 
-Window *xwm_window_list(Display *disp, gchar* prop1, gchar* prop2, long *size)
+Window *xwm_window_list(Display *disp, gchar* prop1, gchar* prop2, unsigned long *size)
 {
     Window *nlst = (Window*)get_property(disp, wm_root, XA_WINDOW,
             prop1 /*"_NET_CLIENT_LIST"*/, size);
@@ -204,10 +204,10 @@ Window *xwm_window_list(Display *disp, gchar* prop1, gchar* prop2, long *size)
     return nlst ? nlst : (lst ? lst : NULL);
 }
 
-Window* xwm_window_list_byage(Display* disp, long* size) {
+Window* xwm_window_list_byage(Display* disp, unsigned long* size) {
 	return xwm_window_list(disp,"_NET_CLIENT_LIST","_WIN_CLIENT_LIST",size);
 }
-Window* xwm_window_list_bystack(Display* disp, long* size) {
+Window* xwm_window_list_bystack(Display* disp, unsigned long* size) {
 	return xwm_window_list(disp,"_NET_CLIENT_LIST_STACKING","_WIN_CLIENT_LIST_STACKING",size);
 }
 
@@ -258,8 +258,11 @@ int xwm_get_win_size(Display *disp, Window win, int stype)
     if (stype == WM_RIGHT)    return rx + a.width+bw*2;
     if (stype == WM_WIDTH)    return a.width;
     if (stype == WM_HEIGHT)   return a.height;
+    
+    return -1;
 }
 
+/*
 static gboolean xwm_supports(Display *disp, const char *prop)
 {
     unsigned long size;
@@ -274,7 +277,10 @@ static gboolean xwm_supports(Display *disp, const char *prop)
     for (i = 0; i < size / sizeof(Atom); i++)
         if (list[i] == p)
             return TRUE;
+    
+    return FALSE;
 }
+*/
 
 void xwm_win_move(Display *disp, Window win, int x, int y)
 {
@@ -321,6 +327,8 @@ VALUE Obj_filter(VALUE self)
     }
 
     rb_iterate(rb_each, self, iter, 0);
+    
+    close_disp;
     return lst;
 }
 
@@ -340,6 +348,7 @@ VALUE Obj_find(VALUE self)
     }
 
     rb_iterate(rb_each, self, iter, 0);
+    close_disp;
     return wnd;
 }
 
@@ -500,7 +509,7 @@ VALUE desktop_index(VALUE self)
 VALUE desktop_to_s(VALUE self)
 {
     rb_struct(DESKTOP);
-    char *txt;
+    char txt[64];
 
     sprintf(txt, "%d", data->index);
     return RSTR(txt);
@@ -509,7 +518,7 @@ VALUE desktop_to_s(VALUE self)
 VALUE desktop_each(VALUE self)
 {
     rbwm_init(DESKTOP);
-    long cnt;
+    unsigned long cnt;
     int i;
 
     Window *lst = xwm_window_list_byage(disp, &cnt);
@@ -573,7 +582,7 @@ VALUE Window_key_loop(VALUE self)
     open_disp;
 
     XEvent ev;
-    KeySym grabbed_key;
+    // KeySym grabbed_key;
 
     for (;;)
     {
@@ -582,13 +591,15 @@ VALUE Window_key_loop(VALUE self)
         switch (ev.type)
         {
             case KeyPress:
-                grabbed_key = XKeycodeToKeysym(disp, ev.xkey.keycode, 0);
-                printf("Test: %s", grabbed_key);
+                // grabbed_key = XKeycodeToKeysym(disp, ev.xkey.keycode, 0);
+                // printf("Test: %s", grabbed_key);
 
             default:
                 break;
         }
     }
+    
+    close_disp;
     
     return Qnil;
 }
@@ -596,7 +607,7 @@ VALUE Window_key_loop(VALUE self)
 VALUE Window_each(VALUE self)
 {
     open_disp;
-    long cnt;
+    unsigned long cnt;
     int i;
 
     Window *lst = xwm_window_list_bystack(disp, &cnt);
@@ -613,8 +624,8 @@ VALUE window_root(VALUE self)
 {
 	rbwm_init(WINDOW);
 	Window root,parent;
-	int i; Window* children;
-	XQueryTree(disp,data->win,&root,&parent,&children,&i);
+	unsigned int _; Window* children;
+	XQueryTree(disp,data->win,&root,&parent,&children,&_);
 	if (children!=NULL)	XFree(children);
 	close_disp;
 	return new_window(root);
@@ -625,7 +636,7 @@ VALUE Window_eachChild(VALUE self)
 	rbwm_init(WINDOW);
 	Window root,parent;
 	int i;
-	int nChild=0;
+	unsigned int nChild=0;
 	Window* children=NULL;
 	XQueryTree(disp,data->win,&root,&parent,&children,&nChild);
 	for (i=0; i<nChild; i++)
@@ -893,11 +904,13 @@ VALUE window_dir(VALUE self, int dir)
 {
     rbwm_init(WINDOW);
     
-    int i,junkx,junky,bw,depth;
-    int wwidth,wheight,wleft,wtop,wright,wbottom;
-    int owidth,oheight,oleft,otop,oright,obottom;
+    int i,junkx,junky;
+    unsigned int bw,depth;
+    int wleft,wtop,wright,wbottom;
+    int oleft,otop,oright,obottom;
+    unsigned int wwidth, wheight, owidth, oheight;
     Window junkroot;
-    long cnt;
+    unsigned long cnt;
     
     XGetGeometry(disp, data->win, &junkroot, &junkx, &junky,
             &wwidth, &wheight, &bw, &depth);
@@ -925,23 +938,27 @@ VALUE window_dir(VALUE self, int dir)
 
         if (same_desk(data->win, lst[i]))
         {
-            if (dir == WM_LEFT)
-                if (oright < wleft && (obottom > wtop && otop < wbottom))
-                    if (!same_win(ret,self) && (oright > FIX2INT(window_right(ret))))
+            if (dir == WM_LEFT) {
+                if (oright < wleft && (obottom > wtop && otop < wbottom)) {
+                    if (!same_win(ret,self) && (oright > FIX2INT(window_right(ret)))) {
                         ret = new_window(lst[i]);
-                    else
-                        ret = new_window(lst[i]);
-
-
-            if (dir == WM_RIGHT)
-                if (oleft > wright && (obottom > wtop && otop < wbottom))
-                    if (!same_win(ret,self) && (oleft < FIX2INT(window_left(ret))))
-                        ret = new_window(lst[i]);
-                    else
-                    {
-                        printf("%s - %d - %d\n", xwm_get_win_title(disp, lst[i]), oleft, FIX2INT(window_left(ret)));
+                    } else {
                         ret = new_window(lst[i]);
                     }
+                }
+            }
+
+
+            if (dir == WM_RIGHT) {
+                if (oleft > wright && (obottom > wtop && otop < wbottom)) {
+                    if (!same_win(ret,self) && (oleft < FIX2INT(window_left(ret)))) {
+                        ret = new_window(lst[i]);
+                    } else {
+                        printf("%s - %d - %ld\n", xwm_get_win_title(disp, lst[i]), oleft, FIX2INT(window_left(ret)));
+                        ret = new_window(lst[i]);
+                    }
+                }
+            }
         }
     }
     
